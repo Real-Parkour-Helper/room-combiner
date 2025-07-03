@@ -15,7 +15,9 @@ camera.position.set(0, 1.6, 5)
 // Controls
 const controls = new PointerLockControls(camera, document.body)
 
-document.addEventListener("click", () => controls.lock())
+renderer.domElement.addEventListener("click", () => {
+  controls.lock()
+})
 
 const move = {
   forward: false,
@@ -128,9 +130,7 @@ import { blockColors } from "./blockColors.js"
 const roomGroup = new THREE.Group()
 scene.add(roomGroup)
 
-let roomPalette = {}
-let roomBlocks = []
-
+const importedRooms = []
 const blockScale = 0.2
 
 const swapKeyValue = (object) =>
@@ -138,43 +138,63 @@ const swapKeyValue = (object) =>
     { ...swapped, [value]: key }
   ), {})
 
+function addRoomToTable(roomIndex, roomName, dimensions) {
+  const tbody = document.querySelector("#room-table tbody")
+  const tr = document.createElement("tr")
+  tr.innerHTML = `
+    <td>${roomName}</td>
+    <td><input type="text" value="0-${dimensions.width - 1}"></td>
+    <td><input type="text" value="0-${dimensions.height - 1}"></td>
+    <td><input type="text" value="0-${dimensions.depth - 1}"></td>
+  `
+  tbody.appendChild(tr)
+}
+
 function clearRoom() {
   roomGroup.clear()
 }
 
-function renderRoom() {
-  const reversePalette = swapKeyValue(roomPalette)
+function renderBlocks(blocks) {
+  clearRoom()
 
-  // Collect blocks by type
   const blockGroups = {}
-  roomBlocks.forEach(block => {
+
+  blocks.forEach(block => {
+    const room = importedRooms[block.sourceRoomIndex]
+    const reversePalette = swapKeyValue(room.palette)
     const blockName = reversePalette[block.id]
     const color = blockColors[blockName]
 
     if (!color) {
-      console.warn(`No color found for block ID: ${block.id}`)
+      console.warn(`No color found for block ID ${block.id} in room ${block.sourceRoomIndex}`)
       return
     }
 
-    if (!blockGroups[blockName]) blockGroups[blockName] = []
-    blockGroups[blockName].push(block)
+    const groupKey = `${block.sourceRoomIndex}:${blockName}`
+
+    if (!blockGroups[groupKey]) {
+      blockGroups[groupKey] = {
+        color,
+        blocks: []
+      }
+    }
+
+    blockGroups[groupKey].blocks.push(block)
   })
 
-  // For each block type, create one InstancedMesh
-  Object.entries(blockGroups).forEach(([blockName, blocks]) => {
-    const color = blockColors[blockName]
-    const material = new THREE.MeshBasicMaterial({ color })
+  Object.entries(blockGroups).forEach(([key, { color, blocks }]) => {
+    const baseColor = new THREE.Color(color)
     const geometry = new THREE.BoxGeometry(blockScale, blockScale, blockScale)
+    const material = new THREE.MeshBasicMaterial({ color })
     const instancedMesh = new THREE.InstancedMesh(geometry, material, blocks.length)
 
-    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(blocks.length * 3), 3)
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(blocks.length * 3), 3
+    )
 
     const dummy = new THREE.Object3D()
 
     blocks.forEach((block, i) => {
-      const brightness = (((block.x + block.y + block.z) % 2 === 0) ? 1.5 : 1.0) + Math.random() * 0.2
-      const adjustedColor = new THREE.Color(color).multiplyScalar(brightness)
-      material.color.set(adjustedColor)
       dummy.position.set(
         block.x * blockScale,
         block.y * blockScale,
@@ -183,17 +203,90 @@ function renderRoom() {
       dummy.updateMatrix()
       instancedMesh.setMatrixAt(i, dummy.matrix)
 
+      const brightness = (((block.x + block.y + block.z) % 2 === 0) ? 1.2 : 1.0) + Math.random() * 0.1
+      const adjustedColor = baseColor.clone().multiplyScalar(brightness)
+
       instancedMesh.instanceColor.setXYZ(i, adjustedColor.r, adjustedColor.g, adjustedColor.b)
     })
 
+    instancedMesh.instanceColor.needsUpdate = true
     roomGroup.add(instancedMesh)
   })
 }
 
+function getMergeRegionsFromTable() {
+  const rows = document.querySelectorAll("#room-table tbody tr")
+  const regions = []
+
+  rows.forEach((row, i) => {
+    const inputs = row.querySelectorAll("input")
+    const [xRange, yRange, zRange] = Array.from(inputs).map(input => {
+      const [min, max] = input.value.split("-").map(Number)
+      return { min, max }
+    })
+
+    regions.push({
+      sourceRoomIndex: i,
+      area: {
+        xMin: xRange.min,
+        xMax: xRange.max,
+        yMin: yRange.min,
+        yMax: yRange.max,
+        zMin: zRange.min,
+        zMax: zRange.max,
+      }
+    })
+  })
+
+  return regions
+}
+
+function mergeRooms(importedRooms, mergeRegions) {
+  const merged = []
+
+  mergeRegions.forEach(region => {
+    const room = importedRooms[region.sourceRoomIndex]
+    room.blocks.forEach(block => {
+      const { x, y, z } = block
+      if (
+        x >= region.area.xMin && x <= region.area.xMax &&
+        y >= region.area.yMin && y <= region.area.yMax &&
+        z >= region.area.zMin && z <= region.area.zMax
+      ) {
+        merged.push({
+          ...block,
+          sourceRoomIndex: region.sourceRoomIndex
+        })
+      }
+    })
+  })
+
+  return merged
+}
+
+
 bindRoomUploader(document.getElementById("import"), (roomData) => {
-  roomPalette = roomData.palette
-  roomBlocks = roomData.blocks
+  const roomIndex = importedRooms.length
+  const roomName = `Room ${roomIndex + 1}`
+
+  importedRooms.push({
+    name: roomName,
+    palette: roomData.palette,
+    blocks: roomData.blocks,
+    dimensions: {
+      width: 37,
+      height: 47,
+      depth: 57
+    }
+  })
+
+  addRoomToTable(roomIndex, roomName, importedRooms[roomIndex].dimensions)
+})
+
+document.getElementById("render").addEventListener("click", () => {
+  const mergeRegions = getMergeRegionsFromTable()
+  const mergedBlocks = mergeRooms(importedRooms, mergeRegions)
 
   clearRoom()
-  renderRoom()
+  renderBlocks(mergedBlocks)
 })

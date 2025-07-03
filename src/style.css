@@ -107,3 +107,34 @@ button:focus-visible {
 #button-row > button {
   background-color: #35355d;
 }
+
+#room-table-container {
+  margin: 80px auto;
+  max-width: 800px;
+  text-align: left;
+  color: #fff;
+}
+
+#room-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+#room-table th,
+#room-table td {
+  border: 1px solid #444;
+  padding: 8px;
+}
+
+#room-table th {
+  background-color: #2c2c4c;
+}
+
+#room-table td input {
+  width: 100%;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 2px 4px;
+}

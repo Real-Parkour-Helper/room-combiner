@@ -138,14 +138,6 @@ const swapKeyValue = (object) =>
     { ...swapped, [value]: key }
   ), {})
 
-function spawnCube(x, y, z, color) {
-  const geometry = new THREE.BoxGeometry(blockScale, blockScale, blockScale)
-  const material = new THREE.MeshBasicMaterial({ color })
-  const cube = new THREE.Mesh(geometry, material)
-  cube.position.set(x * blockScale, y * blockScale, z * blockScale)
-  roomGroup.add(cube)
-}
-
 function clearRoom() {
   roomGroup.clear()
 }
@@ -175,9 +167,14 @@ function renderRoom() {
     const geometry = new THREE.BoxGeometry(blockScale, blockScale, blockScale)
     const instancedMesh = new THREE.InstancedMesh(geometry, material, blocks.length)
 
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(blocks.length * 3), 3)
+
     const dummy = new THREE.Object3D()
 
     blocks.forEach((block, i) => {
+      const brightness = (((block.x + block.y + block.z) % 2 === 0) ? 1.5 : 1.0) + Math.random() * 0.2
+      const adjustedColor = new THREE.Color(color).multiplyScalar(brightness)
+      material.color.set(adjustedColor)
       dummy.position.set(
         block.x * blockScale,
         block.y * blockScale,
@@ -185,6 +182,8 @@ function renderRoom() {
       )
       dummy.updateMatrix()
       instancedMesh.setMatrixAt(i, dummy.matrix)
+
+      instancedMesh.instanceColor.setXYZ(i, adjustedColor.r, adjustedColor.g, adjustedColor.b)
     })
 
     roomGroup.add(instancedMesh)

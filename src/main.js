@@ -141,13 +141,40 @@ const swapKeyValue = (object) =>
 function addRoomToTable(roomIndex, roomName, dimensions) {
   const tbody = document.querySelector("#room-table tbody")
   const tr = document.createElement("tr")
+  tr.dataset.roomIndex = roomIndex
+
   tr.innerHTML = `
     <td>${roomName}</td>
     <td><input type="text" value="0-${dimensions.width - 1}"></td>
     <td><input type="text" value="0-${dimensions.height - 1}"></td>
     <td><input type="text" value="0-${dimensions.depth - 1}"></td>
+    <td><button class="remove-room">Remove</button></td>
   `
+
   tbody.appendChild(tr)
+
+  tr.querySelector(".remove-room").addEventListener("click", () => {
+    removeRoom(roomIndex)
+  })
+}
+
+function removeRoom(roomIndex) {
+  // Remove room from importedRooms
+  importedRooms.splice(roomIndex, 1)
+
+  // Remove table row
+  const row = document.querySelector(`#room-table tbody tr[data-room-index="${roomIndex}"]`)
+  if (row) row.remove()
+
+  // Update remaining room indices in both importedRooms and table
+  const rows = document.querySelectorAll("#room-table tbody tr")
+  rows.forEach((row, i) => {
+    row.dataset.roomIndex = i
+    importedRooms[i].name = `Room ${i + 1}`
+    row.querySelector("td").textContent = `Room ${i + 1}`
+  })
+
+  clearRoom()
 }
 
 function clearRoom() {

@@ -10,13 +10,6 @@ const renderer = new THREE.WebGLRenderer()
 renderer.setSize(window.innerWidth, window.innerHeight)
 document.body.appendChild(renderer.domElement)
 
-// Example cube
-const cube = new THREE.Mesh(
-  new THREE.BoxGeometry(0.2, 0.2, 0.2),
-  new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-)
-scene.add(cube)
-
 camera.position.set(0, 1.6, 5)
 
 // Controls
@@ -124,3 +117,84 @@ function animate() {
 }
 
 animate()
+
+//////////////////////////////////
+// Room loading
+//////////////////////////////////
+
+import { bindRoomUploader } from "./roomLoading.js"
+import { blockColors } from "./blockColors.js"
+
+const roomGroup = new THREE.Group()
+scene.add(roomGroup)
+
+let roomPalette = {}
+let roomBlocks = []
+
+const blockScale = 0.2
+
+const swapKeyValue = (object) =>
+  Object.entries(object).reduce((swapped, [key, value]) => (
+    { ...swapped, [value]: key }
+  ), {})
+
+function spawnCube(x, y, z, color) {
+  const geometry = new THREE.BoxGeometry(blockScale, blockScale, blockScale)
+  const material = new THREE.MeshBasicMaterial({ color })
+  const cube = new THREE.Mesh(geometry, material)
+  cube.position.set(x * blockScale, y * blockScale, z * blockScale)
+  roomGroup.add(cube)
+}
+
+function clearRoom() {
+  roomGroup.clear()
+}
+
+function renderRoom() {
+  const reversePalette = swapKeyValue(roomPalette)
+
+  // Collect blocks by type
+  const blockGroups = {}
+  roomBlocks.forEach(block => {
+    const blockName = reversePalette[block.id]
+    const color = blockColors[blockName]
+
+    if (!color) {
+      console.warn(`No color found for block ID: ${block.id}`)
+      return
+    }
+
+    if (!blockGroups[blockName]) blockGroups[blockName] = []
+    blockGroups[blockName].push(block)
+  })
+
+  // For each block type, create one InstancedMesh
+  Object.entries(blockGroups).forEach(([blockName, blocks]) => {
+    const color = blockColors[blockName]
+    const material = new THREE.MeshBasicMaterial({ color })
+    const geometry = new THREE.BoxGeometry(blockScale, blockScale, blockScale)
+    const instancedMesh = new THREE.InstancedMesh(geometry, material, blocks.length)
+
+    const dummy = new THREE.Object3D()
+
+    blocks.forEach((block, i) => {
+      dummy.position.set(
+        block.x * blockScale,
+        block.y * blockScale,
+        block.z * blockScale
+      )
+      dummy.updateMatrix()
+      instancedMesh.setMatrixAt(i, dummy.matrix)
+    })
+
+    roomGroup.add(instancedMesh)
+  })
+}
+
+bindRoomUploader(document.getElementById("import"), (roomData) => {
+  roomPalette = roomData.palette
+  roomBlocks = roomData.blocks
+
+  clearRoom()
+  renderRoom()
+})

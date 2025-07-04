@@ -291,6 +291,72 @@ function mergeRooms(importedRooms, mergeRegions) {
   return merged
 }
 
+function exportMergedRoom() {
+  const mergeRegions = getMergeRegionsFromTable()
+  const mergedBlocks = mergeRooms(importedRooms, mergeRegions)
+
+  // Build a new palette and remap IDs
+  const combinedPalette = {}
+  let nextId = 0
+
+  const blockNameToNewId = {}
+
+  mergedBlocks.forEach(block => {
+    const room = importedRooms[block.sourceRoomIndex]
+    const reversePalette = swapKeyValue(room.palette)
+    const blockName = reversePalette[block.id]
+
+    if (!(blockName in blockNameToNewId)) {
+      blockNameToNewId[blockName] = nextId
+      combinedPalette[blockName] = nextId
+      nextId++
+    }
+
+    block.id = blockNameToNewId[blockName]
+    block._blockName = blockName // keep for meta
+    delete block.sourceRoomIndex // remove internal field
+  })
+
+  // Create merged room JSON
+  const mergedRoom = {
+    palette: combinedPalette,
+    blocks: mergedBlocks.map(({ _blockName, ...rest }) => rest)
+  }
+
+  downloadJson(mergedRoom, "blocks.json")
+
+  // Create meta.json
+  const checkpoints = mergedBlocks
+    .filter(block => block._blockName === "minecraft:light_weighted_pressure_plate")
+    .map(block => ({ x: block.x, y: block.y, z: block.z }))
+
+  const meta = {
+    name: "merged",
+    width: 37,
+    height: 47,
+    depth: 57,
+    checkpoints
+  }
+
+  downloadJson(meta, "meta.json")
+}
+
+function downloadJson(obj, filename) {
+  const json = JSON.stringify(obj)
+  const blob = new Blob([json], { type: "application/json" })
+  const url = URL.createObjectURL(blob)
+
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+
+  setTimeout(() => {
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, 0)
+}
 
 bindRoomUploader(document.getElementById("import"), (roomData) => {
   const roomIndex = importedRooms.length
@@ -317,3 +383,5 @@ document.getElementById("render").addEventListener("click", () => {
   clearRoom()
   renderBlocks(mergedBlocks)
 })
+
+document.getElementById("export").addEventListener("click", exportMergedRoom)

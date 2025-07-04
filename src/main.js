@@ -291,11 +291,53 @@ function mergeRooms(importedRooms, mergeRegions) {
   return merged
 }
 
+
 function exportMergedRoom() {
+  const { mergedRoom, meta } = buildMergedData()
+
+  downloadJson(mergedRoom, "blocks.json")
+  downloadJson(meta, "meta.json")
+}
+
+function exportMergedWorld() {
+  const { mergedRoom, meta } = buildMergedData()
+
+  const payload = {
+    palette: mergedRoom.palette,
+    blocks: mergedRoom.blocks
+  }
+
+  fetch("https://api.parkourduels.com/room-combiner/build", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  })
+    .then(res => {
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      return res.blob()
+    })
+    .then(blob => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "world.zip"
+      document.body.appendChild(a)
+      a.click()
+      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    })
+    .catch(err => {
+      alert(`Failed to export world: ${err.message}`)
+      console.error(err)
+    })
+}
+
+function buildMergedData() {
   const mergeRegions = getMergeRegionsFromTable()
   const mergedBlocks = mergeRooms(importedRooms, mergeRegions)
 
-  // Build a new palette and remap IDs
   const combinedPalette = {}
   let nextId = 0
 
@@ -313,19 +355,15 @@ function exportMergedRoom() {
     }
 
     block.id = blockNameToNewId[blockName]
-    block._blockName = blockName // keep for meta
-    delete block.sourceRoomIndex // remove internal field
+    block._blockName = blockName
+    delete block.sourceRoomIndex
   })
 
-  // Create merged room JSON
   const mergedRoom = {
     palette: combinedPalette,
     blocks: mergedBlocks.map(({ _blockName, ...rest }) => rest)
   }
 
-  downloadJson(mergedRoom, "blocks.json")
-
-  // Create meta.json
   const checkpoints = mergedBlocks
     .filter(block => block._blockName === "minecraft:light_weighted_pressure_plate")
     .map(block => ({ x: block.x, y: block.y, z: block.z }))
@@ -338,12 +376,11 @@ function exportMergedRoom() {
     checkpoints
   }
 
-  downloadJson(meta, "meta.json")
+  return { mergedRoom, meta }
 }
 
-
 function downloadJson(obj, filename) {
-  const json = JSON.stringify(obj)
+  const json = JSON.stringify(obj, null, 2)
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
 
@@ -386,3 +423,4 @@ document.getElementById("render").addEventListener("click", () => {
 })
 
 document.getElementById("export").addEventListener("click", exportMergedRoom)
+document.getElementById("exportWorld").addEventListener("click", exportMergedWorld)

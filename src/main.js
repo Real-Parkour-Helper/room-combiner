@@ -341,6 +341,7 @@ function exportMergedRoom() {
   downloadJson(meta, "meta.json")
 }
 
+
 function downloadJson(obj, filename) {
   const json = JSON.stringify(obj)
   const blob = new Blob([json], { type: "application/json" })
